@@ -1,0 +1,8 @@
+# invocations seems to be broken as of 2023.07.07
+invoke
+pip-tools
+setuptools
+setuptools-scm
+trove-classifiers
+twine
+wheel

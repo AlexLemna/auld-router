@@ -1,0 +1,10 @@
+# You can find our dependencies in the requirements/ folder, not
+# this requirements.txt file. However, I'm keeping this file around
+# for dependabot's sake, and because letting someone get a workable 
+# environment from "pip install -r requirements.txt" still feels
+# like good manners.
+
+-r requirements/main.txt
+-r requirements/dev.txt
+-r requirements/lint.txt
+-r requirements/tests.txt

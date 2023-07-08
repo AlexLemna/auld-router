@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "auld-router"
+dynamic = ["version", "readme", "classifiers"]
+requires-python = ">= 3.10"
+
+[project.scripts]
+auld-perimeter = "auld_router.__main__:cli"
+
+[tool.setuptools.dynamic]
+readme = { file = ["README.md"] }
+version = { attr = "auld_router.__version__" }
+classifiers = { file = "tools/pypi/classifiers.txt" }
