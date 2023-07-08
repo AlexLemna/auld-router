@@ -1,14 +1,21 @@
+#!/usr/bin/env python
 """ initialize_repository.py
 
 When run without any options, this script will ensure the existence 
-and activation of a minimally-provisioned virtual environment suitable 
-for dev work.
+of a minimally-provisioned virtual environment suitable for dev work.
 
 This script can only deal with virtual environments in the common ".venv",
 ".env", "venv", and "env" folders. Additionally, it won't work when there
 are multiple virtual environments already installed in this folder.
 
 """
+#
+# This is a single-file Python script that I've used as sort of a playground to
+# over-engineer a solution to a problem... even though the problem, "What to do
+# if someone clones this repo from GitHub and doesn't know how to get started?"
+# doesn't *really* need to be solved.
+#
+
 __version_info__ = (0, 2023, 8, 7, 0)
 __version__ = ".".join([str(version_part) for version_part in __version_info__])
 
@@ -22,26 +29,15 @@ from enum import Enum
 from logging import Logger
 from pathlib import Path
 
+#
+# Some custom exceptions
+# ----------------------
+#
+
 
 class TooManyVenvsError(Exception):
-    """
-    An exception indicating that the script is not designed to handle repositories with
-    multiple virtual environments.
-
-    Parameters
-    ----------
-    existing_venvs : list[Path]
-        A list of paths to the existing virtual environments.
-    show_abs_paths : bool, optional
-        Specifies whether to show absolute paths or relative paths. Defaults to False.
-    repository_path : Path, optional
-        The path to the repository. Defaults to the parent directory of the current file.
-
-    Attributes
-    ----------
-    message : str
-        The error message indicating the detection of multiple virtual environments.
-    """
+    """An exception indicating that the script is not designed to handle repositories
+    with multiple virtual environments."""
 
     def __init__(
         self,
@@ -63,7 +59,67 @@ class TooManyVenvsError(Exception):
         super().__init__(self.message)
 
 
+class InsideVenvError(Exception):
+    ...
+
+
+#
+# Dealing with shells
+# -------------------
+#
+
+
+class Shell(Enum):
+    """The type of shell the current Python executable is running in."""
+
+    NO_SHELL_DETECTED = 0
+    SH_LIKE = 1
+    """Shells like `ash`, `bash`, `ksh`, `zsh`."""
+    CSH_LIKE = 2
+    """Shells like `csh`, `tcsh`."""
+    FISH = 3
+    """The `fish` shell."""
+    POWERSHELL = 4
+    """Microsoft's `PowerShell`, usually found on modern Windows systems but
+    also able to be run on Linux."""
+    CMD_EXE = 5
+    """The venerable Windows `cmd.exe`."""
+
+
+def get_activate_file(venv_directory: Path, shell: Shell):
+    if shell.SH_LIKE:
+        return venv_directory / "bin" / "activate"
+    elif shell.CSH_LIKE:
+        return venv_directory / "bin" / "activate.csh"
+    elif shell.FISH:
+        return venv_directory / "bin" / "activate.fish"
+    elif shell.CMD_EXE:
+        return venv_directory / "bin" / "activate.bat"
+    elif shell.POWERSHELL and platform.system == "Windows":
+        return venv_directory / "Scripts" / "Activate.ps1"
+    elif shell.POWERSHELL:
+        return venv_directory / "bin" / "Activate.ps1"
+    else:
+        return None
+
+
+def detect_shell(dry_run=False) -> Shell:
+    ...
+
+
+#
+# Dealing with virtual environments
+# ---------------------------------
+#
+
+
 def find_venv() -> Path | None:
+    """In the directory where this script is located, look for a subdirectory
+    containing a virtual environment. If such a subdirectory exists, return it
+    (as a `Path` object). If not, return `None`.
+
+    If multiple subdirectories exist that could contain virtual environments,
+    raises `TooManyVenvsError`."""
     common_venv_directories = [".env", ".venv", "env", "venv"]
     repository = Path(__file__).parent
 
@@ -95,62 +151,39 @@ def currently_in_venv() -> bool:
         return False
 
 
-def create_venv(dry_run=False):
+def create_venv(dry_run: bool, verbose: bool, force: bool = False):
+    if currently_in_venv:
+        raise InsideVenvError
     venv.EnvBuilder()
 
 
-def destroy_venv(dry_run=False):
-    ...
-
-
-def activate_venv(dry_run=False):
-    ...
-
-
-def deactivate_venv(dry_run=False):
-    ...
-
-
-class Shell(Enum):
-    SH_LIKE = 1
-    """Shells like ash, bash, ksh, zsh."""
-    CSH_LIKE = 2
-    """Shells like csh, tcsh."""
-    FISH = 3
-    """The fish shell."""
-    POWERSHELL = 4
-    """Windows Powershell."""
-    CMD_EXE = 5
-    """Windows cmd.exe"""
-
-
-def get_activate_file(venv_directory: Path, shell: Shell):
-    if shell.SH_LIKE:
-        return venv_directory / "bin" / "activate"
-    elif shell.CSH_LIKE:
-        return venv_directory / "bin" / "activate.csh"
-    elif shell.FISH:
-        return venv_directory / "bin" / "activate.fish"
-    elif shell.CMD_EXE:
-        return venv_directory / "bin" / "activate.bat"
-    elif shell.POWERSHELL and platform.system == "Windows":
-        return venv_directory / "Scripts" / "Activate.ps1"
-    elif shell.POWERSHELL:
-        return venv_directory / "bin" / "Activate.ps1"
-    else:
-        return None
-
-
-def detect_shell(dry_run=False) -> Shell:
-    ...
+#
+# Setting up our virtual environment
+# ----------------------------------
+#
 
 
 def install_basic_tools(dry_run=False):
     basic_tools = ["invoke", "pip", "pip-tools", "setuptools"]
 
 
+#
+# Running our script
+# ------------------
+#
+
+
 def cli():
-    def get_parser():
+    """The human interface to this script. It accepts commands when this script is
+    invoked (from the terminal, etc.) and then calls other functions defined in
+    this script according to those commands."""
+    #
+    # The "cli" function is really two sub-functions stitched together. The
+    # first function, "get_parser", creates a "ArgumentParser" object and
+    # defines its expected input. The second function .
+    #
+
+    def get_parser() -> argparse.ArgumentParser:
         file_name = Path(__file__).name
         program_name = file_name.removesuffix(".py")
 
@@ -193,12 +226,15 @@ def cli():
             help="Show this help message and exit.",
         )
         # --verbose
-        p.add_argument(
-            "--verbose",
-            "-v",
-            action="store_true",
-            help="Display additional output while the program runs.",
-        )
+        args = ["--verbose", "-v"]
+        msg = "Display additional output while the program runs."
+        p.add_argument(*args, action="store_true", help=msg)
+        # p.add_argument(
+        #     "--verbose",
+        #     "-v",
+        #     action="store_true",
+        #     help="Display additional output while the program runs.",
+        # )
         # --version
         p.add_argument(
             "--version",
@@ -211,17 +247,42 @@ def cli():
         return p
 
     def dispatch(parsed: argparse.Namespace):
+        """Based on the results (a `Namespace` of commands, options, etc) from
+        the Argparse parser, trigger whatever actions correspond to the user's
+        input."""
+
+        #
+        # I Like to have seperate "cmd_*" functions defined in my dispatch
+        # function, just to make it clear to myself what sorts of "logical
+        # commands" I'm expecting this script to perform.
+        #
         def cmd_initialize(dry_run: bool, verbose: bool):
             print("INITIALIZING")
+            create_venv(dry_run=parsed.dry_run, verbose=parsed.verbose)
 
         def cmd_destroy_and_initialize(dry_run: bool, verbose: bool):
             print("DESTROYING AND INITIALIZING")
+            create_venv(dry_run=parsed.dry_run, verbose=parsed.verbose, force=True)
 
+        #
+        # Next comes the actual "dispatch" logic, connecting the Namespace of commands,
+        # options, etc., to the functions that determine what this script is going
+        # to do, and how it's going to do it.
+        #
+        #
+        # Namespace objects are kinda interesting - they're part of the built-in
+        # argparse library, and they represent the "parsed results" generated by an
+        # ArgumentParser. If you have a Namespace `ns` and you issue the command
+        # `print(ns)`, you'll be able to see some what's inside it. Here's an example:
+        #
+        #   Namespace(dry_run=False, force=False, verbose=False)
+        #
         if parsed.dry_run:
             print("PERFORMING DRY RUN")
 
         if parsed.verbose:
             print("RUNNING IN VERBOSE MODE")
+            # Print the Namespace that we recieved from our ArgumentParser
             print(f"Parsed command-line input: {parsed}")
 
         if parsed.force:
@@ -229,10 +290,19 @@ def cli():
         else:
             cmd_initialize(dry_run=parsed.dry_run, verbose=parsed.verbose)
 
-    parser = get_parser()
-    user_input = parser.parse_args()
+    #
+    # And now, the entirety of the cli function.
+    #
+
+    # Create the parser, and have it parse the input.
+    user_input = get_parser().parse_args()
+    print(user_input)
+    # Pass off whatever the parser understood to the dispatch function.
     dispatch(parsed=user_input)
+    # ...and yes, once you've created an ArgumentParser `bob_the_parser`,
+    # using it really is as simple as typing `bob_the_parser.parse_args()`.
 
 
+# Only run this script when directly called. Otherwise, do nothing.
 if __name__ == "__main__":
     cli()
