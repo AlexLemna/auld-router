@@ -1,0 +1,1 @@
+The configuration will be a JSON file.

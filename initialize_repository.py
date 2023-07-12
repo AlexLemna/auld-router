@@ -142,19 +142,28 @@ def find_venv() -> Path | None:
 def currently_in_venv() -> bool:
     if os.getenv("CONDA_DEFAULT_ENV") or os.getenv("VIRTUAL_ENV"):
         # Anaconda or Venv or Virtualenv environment is active
+        print("IN VENV BY ENV VARIABLE")
         return True
     elif hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix:
         # A virtual environment isn't "active" but the Python interpreter
         # we're running is nonetheless not the base.
+        print("IN VENV BY PREFIX")
         return True
     else:
         return False
 
 
 def create_venv(dry_run: bool, verbose: bool, force: bool = False):
-    if currently_in_venv:
+    if currently_in_venv():
         raise InsideVenvError
-    venv.EnvBuilder()
+
+    if not dry_run:
+        venv_builder = venv.EnvBuilder(
+            clear=True if force else False,
+            with_pip=True,
+            upgrade_deps=True,
+        )
+        venv_builder.create(str(Path(__file__).parent / ".venv"))
 
 
 #
@@ -163,8 +172,12 @@ def create_venv(dry_run: bool, verbose: bool, force: bool = False):
 #
 
 
-def install_basic_tools(dry_run=False):
+def install_basic_tools(dry_run=False, verbose=False):
     basic_tools = ["invoke", "pip", "pip-tools", "setuptools"]
+    if not dry_run:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "--python", ".venv", "install", *basic_tools]
+        )
 
 
 #
@@ -203,7 +216,7 @@ def cli():
             # usage=f"<PYTHON INTERPRETER> -m {program_name} [OPTIONS]",
             description=SHORT_DESCRIPTION,
             epilog=FULL_DESCRIPTION,
-            add_help=False,  # We override the built-in help message with out own
+            add_help=False,  # We override the built-in help message with our own
         )
 
         # --dry-run
@@ -259,10 +272,12 @@ def cli():
         def cmd_initialize(dry_run: bool, verbose: bool):
             print("INITIALIZING")
             create_venv(dry_run=parsed.dry_run, verbose=parsed.verbose)
+            install_basic_tools(dry_run=parsed.dry_run)
 
         def cmd_destroy_and_initialize(dry_run: bool, verbose: bool):
             print("DESTROYING AND INITIALIZING")
             create_venv(dry_run=parsed.dry_run, verbose=parsed.verbose, force=True)
+            install_basic_tools(dry_run=parsed.dry_run)
 
         #
         # Next comes the actual "dispatch" logic, connecting the Namespace of commands,
